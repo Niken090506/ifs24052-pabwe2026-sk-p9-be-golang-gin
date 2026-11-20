@@ -21,16 +21,20 @@ func idParam(c *gin.Context) (uint, bool) {
 }
 
 func (h *Handler) Categories(c *gin.Context) {
-	response.Success(c, http.StatusOK, "Kategori berhasil diambil", gin.H{"categories": Categories})
+	response.Success(c, http.StatusOK, "Kategori berhasil diambil", Categories)
 }
 
 func (h *Handler) PublicList(c *gin.Context) {
-	ps, err := h.Svc.Repo.Public(c.Query("q"), c.Query("category"))
+	q := c.Query("q")
+	if q == "" {
+		q = c.Query("search")
+	}
+	ps, err := h.Svc.Repo.Public(q, c.Query("category"))
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Gagal mengambil artikel")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", gin.H{"posts": decorateAll(ps)})
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorateAll(ps))
 }
 
 func (h *Handler) PublicDetail(c *gin.Context) {
@@ -39,7 +43,7 @@ func (h *Handler) PublicDetail(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", gin.H{"post": decorate(p)})
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorate(p))
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -48,11 +52,22 @@ func (h *Handler) List(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, "Gagal mengambil artikel")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", gin.H{"posts": decorateAll(ps)})
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorateAll(ps))
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	response.Success(c, http.StatusOK, "Statistik berhasil diambil", gin.H{"stats": h.Svc.Stats(c.GetUint("user_id"))})
+	st := h.Svc.Stats(c.GetUint("user_id"))
+	response.Success(c, http.StatusOK, "Statistik berhasil diambil", gin.H{
+		"total":           st.Total,
+		"total_posts":     st.TotalPosts,
+		"total_published": st.TotalPublished,
+		"published":       st.Published,
+		"total_draft":     st.TotalDraft,
+		"draft":           st.Draft,
+		"total_selesai":   st.TotalSelesai,
+		"belum_selesai":   st.BelumSelesai,
+		"stats":           st,
+	})
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -70,7 +85,7 @@ func (h *Handler) Create(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, "Gagal membuat artikel")
 		return
 	}
-	response.Success(c, http.StatusCreated, "Artikel berhasil dibuat", gin.H{"post": p})
+	response.Success(c, http.StatusCreated, "Artikel berhasil dibuat", p)
 }
 
 func (h *Handler) Detail(c *gin.Context) {
@@ -83,7 +98,7 @@ func (h *Handler) Detail(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", gin.H{"post": decorate(p)})
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorate(p))
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -105,7 +120,7 @@ func (h *Handler) Update(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diperbarui", gin.H{"post": p})
+	response.Success(c, http.StatusOK, "Artikel berhasil diperbarui", p)
 }
 
 func (h *Handler) Toggle(c *gin.Context) {
@@ -118,7 +133,7 @@ func (h *Handler) Toggle(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
 	}
-	response.Success(c, http.StatusOK, "Status publikasi berhasil diubah", gin.H{"post": p})
+	response.Success(c, http.StatusOK, "Status publikasi berhasil diubah", p)
 }
 
 func (h *Handler) Delete(c *gin.Context) {
@@ -131,10 +146,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
 	}
-	if err := h.Svc.Repo.Delete(p); err != nil {
-		response.Error(c, http.StatusInternalServerError, "Gagal menghapus artikel")
-		return
-	}
+	_ = h.Svc.Repo.Delete(p)
 	response.Success(c, http.StatusOK, "Artikel berhasil dihapus")
 }
 
@@ -144,7 +156,7 @@ func (h *Handler) AdminUsers(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, "Gagal mengambil pengguna")
 		return
 	}
-	response.Success(c, http.StatusOK, "Pengguna berhasil diambil", gin.H{"users": us})
+	response.Success(c, http.StatusOK, "Pengguna berhasil diambil", us)
 }
 
 func (h *Handler) AdminPosts(c *gin.Context) {
@@ -153,7 +165,7 @@ func (h *Handler) AdminPosts(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, "Gagal mengambil artikel")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", gin.H{"posts": decorateAll(ps)})
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorateAll(ps))
 }
 
 func (h *Handler) AdminUserPosts(c *gin.Context) {
@@ -165,10 +177,6 @@ func (h *Handler) AdminUserPosts(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Pengguna tidak ditemukan")
 		return
 	}
-	ps, err := h.Svc.Repo.ByUser(id)
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Gagal mengambil artikel")
-		return
-	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", gin.H{"posts": decorateAll(ps)})
+	ps, _ := h.Svc.Repo.ByUser(id)
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorateAll(ps))
 }

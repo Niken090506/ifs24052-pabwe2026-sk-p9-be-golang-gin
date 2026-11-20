@@ -28,7 +28,13 @@ func (h *Handler) Generate(c *gin.Context) {
 		return
 	}
 	response.Success(c, http.StatusOK, "Artikel berhasil dihasilkan", gin.H{
-		"title": art.Title, "category": art.Category, "excerpt": art.Excerpt,
-		"content": art.Content, "sources": art.Sources, "article": art,
+		"title":          art.Title,
+		"category":       art.Category,
+		"excerpt":        art.Excerpt,
+		"content":        art.Content,
+		"sources":        art.Sources,
+		"search_sources": art.SearchSources,
+		"article":        art,
+		"post":           art,
 	})
 }

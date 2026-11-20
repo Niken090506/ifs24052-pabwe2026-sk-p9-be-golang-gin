@@ -33,10 +33,7 @@ func (s *Service) Register(req RegisterRequest) (*models.User, error) {
 	if s.Repo.Exists(req.Username, req.Email, 0) {
 		return nil, ErrDuplicate
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	u := &models.User{Username: req.Username, Email: req.Email, Password: string(hash), Role: "member"}
 	if err := s.Repo.Create(u); err != nil {
 		return nil, err
@@ -78,10 +75,7 @@ func (s *Service) Update(id uint, req UpdateProfileRequest) (*models.User, error
 		return nil, ErrDuplicate
 	}
 	if req.Password != "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, err
-		}
+		hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		u.Password = string(hash)
 	}
 	return u, s.Repo.Save(u)

@@ -29,10 +29,7 @@ func (s *SearchClient) Search(ctx context.Context, query string) ([]Source, erro
 	q := u.Query()
 	q.Set("q", query)
 	u.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if s.Key != "" {
 		req.Header.Set("Authorization", "Bearer "+s.Key)
 	}

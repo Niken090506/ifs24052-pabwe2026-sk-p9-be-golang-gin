@@ -134,7 +134,13 @@ func (s *Service) Toggle(id, uid uint) (*models.Post, error) {
 
 func (s *Service) Stats(uid uint) Stats {
 	total, pub := s.Repo.Count(uid, false), s.Repo.Count(uid, true)
-	return Stats{Total: total, TotalPublished: pub, TotalDraft: total - pub, TotalSelesai: pub, BelumSelesai: total - pub}
+	draft := total - pub
+	return Stats{
+		Total: total, TotalPosts: total,
+		TotalPublished: pub, Published: pub,
+		TotalDraft: draft, Draft: draft,
+		TotalSelesai: pub, BelumSelesai: draft,
+	}
 }
 
 func decorateAll(ps []models.Post) []models.Post {
@@ -151,7 +157,18 @@ func (s *Service) AdminUsers() ([]AdminUser, error) {
 	}
 	out := make([]AdminUser, 0, len(users))
 	for _, u := range users {
-		out = append(out, AdminUser{User: u, TotalPosts: s.Repo.Count(u.ID, false), TotalPublished: s.Repo.Count(u.ID, true)})
+		total := s.Repo.Count(u.ID, false)
+		pub := s.Repo.Count(u.ID, true)
+		draft := total - pub
+		out = append(out, AdminUser{
+			User:           u,
+			TotalPosts:     total,
+			PostsCount:     total,
+			TotalPublished: pub,
+			PublishedPosts: pub,
+			TotalDraft:     draft,
+			DraftPosts:     draft,
+		})
 	}
 	return out, nil
 }

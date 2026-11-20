@@ -73,6 +73,12 @@ func TestFullFlow(t *testing.T) {
 	code, _ = call(r, "GET", "/api.json", "", nil)
 	assert.Equal(t, 200, code)
 
+	reqTLS := httptest.NewRequest("GET", "/api.json", nil)
+	reqTLS.Header.Set("X-Forwarded-Proto", "https")
+	wTLS := httptest.NewRecorder()
+	r.ServeHTTP(wTLS, reqTLS)
+	assert.Equal(t, 200, wTLS.Code)
+
 	// auth
 	code, _ = call(r, "POST", "/api/auth/register", "", map[string]string{"username": "budi", "email": "budi@x.com", "password": "pw"})
 	assert.Equal(t, 201, code)
@@ -85,20 +91,24 @@ func TestFullFlow(t *testing.T) {
 	tok := login(t, r, "budi", "pw")
 	code, _ = call(r, "GET", "/api/auth/profile", "", nil)
 	assert.Equal(t, 401, code)
+	code, _ = call(r, "GET", "/api/auth/profile", tok, nil)
+	assert.Equal(t, 200, code)
 	code, _ = call(r, "PUT", "/api/auth/profile", tok, map[string]string{"email": "budi2@x.com"})
+	assert.Equal(t, 200, code)
+	code, _ = call(r, "POST", "/api/auth/logout", tok, nil)
 	assert.Equal(t, 200, code)
 
 	// posts
 	code, out := call(r, "POST", "/api/posts", tok, map[string]interface{}{"title": "Halo Dunia!", "content": "isi artikel", "category": "Teknologi", "is_published": true})
 	assert.Equal(t, 201, code)
-	slug := out["data"].(map[string]interface{})["post"].(map[string]interface{})["slug"]
+	slug := out["data"].(map[string]interface{})["slug"]
 	assert.Equal(t, "halo-dunia", slug)
 	_, out = call(r, "POST", "/api/posts", tok, map[string]interface{}{"title": "Halo Dunia", "content": "isi"})
-	assert.Equal(t, "halo-dunia-2", out["data"].(map[string]interface{})["post"].(map[string]interface{})["slug"])
+	assert.Equal(t, "halo-dunia-2", out["data"].(map[string]interface{})["slug"])
 
 	code, out = call(r, "GET", "/api/public/posts?q=halo&category=Teknologi", "", nil)
 	assert.Equal(t, 200, code)
-	assert.Len(t, out["data"].(map[string]interface{})["posts"], 1)
+	assert.Len(t, out["data"], 1)
 	code, _ = call(r, "GET", "/api/public/posts/halo-dunia", "", nil)
 	assert.Equal(t, 200, code)
 	code, _ = call(r, "GET", "/api/public/posts/halo-dunia-2", "", nil)
@@ -107,7 +117,11 @@ func TestFullFlow(t *testing.T) {
 	code, _ = call(r, "PATCH", "/api/posts/2/toggle-publish", tok, nil)
 	assert.Equal(t, 200, code)
 	code, out = call(r, "GET", "/api/posts/stats", tok, nil)
-	assert.Equal(t, float64(2), out["data"].(map[string]interface{})["stats"].(map[string]interface{})["total_published"])
+	assert.Equal(t, float64(2), out["data"].(map[string]interface{})["total_published"])
+	code, _ = call(r, "GET", "/api/posts", tok, nil)
+	assert.Equal(t, 200, code)
+	code, _ = call(r, "GET", "/api/posts/1", tok, nil)
+	assert.Equal(t, 200, code)
 	code, _ = call(r, "PUT", "/api/posts/1", tok, map[string]interface{}{"title": "Baru", "content": "x"})
 	assert.Equal(t, 200, code)
 	code, _ = call(r, "PUT", "/api/posts/1", tok, map[string]interface{}{"title": "", "content": "x"})

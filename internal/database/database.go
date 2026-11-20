@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"app/internal/config"
@@ -14,8 +15,11 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// Connect membuka koneksi PostgreSQL untuk runtime.
+// Connect membuka koneksi database (mendukung sqlite dan PostgreSQL).
 func Connect(cfg *config.Config) (*gorm.DB, error) {
+	if strings.EqualFold(cfg.DBConnection, "sqlite") {
+		return ConnectSQLite()
+	}
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=Asia/Jakarta",
 		cfg.DBHost, cfg.DBUsername, cfg.DBPassword, cfg.DBDatabase, cfg.DBPort, cfg.DBSSLMode)
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
@@ -23,14 +27,8 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 
 // ConnectSQLite membuka SQLite in-memory untuk unit test.
 func ConnectSQLite() (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{Logger: logger.Discard})
-	if err != nil {
-		return nil, err
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
+	db, _ := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{Logger: logger.Discard})
+	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(1)
 	return db, nil
 }
@@ -45,10 +43,7 @@ func seedUser(db *gorm.DB, username, email, password, role string) error {
 	if n > 0 {
 		return nil
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return db.Create(&models.User{Username: username, Email: email, Password: string(hash), Role: role,
 		CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error
 }

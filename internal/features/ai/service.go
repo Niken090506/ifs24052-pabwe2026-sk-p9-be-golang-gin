@@ -36,8 +36,24 @@ func extractJSON(s string) string {
 	return s
 }
 
+func shouldSearch(req GenerateRequest) bool {
+	if req.IncludeWebSearch != nil {
+		return *req.IncludeWebSearch
+	}
+	if req.UseSearchEngine != nil {
+		return *req.UseSearchEngine
+	}
+	if req.UseWebSearch != nil {
+		return *req.UseWebSearch
+	}
+	return true
+}
+
 func (s *Service) Generate(ctx context.Context, req GenerateRequest, validCat func(string) bool) (*Article, error) {
 	topic := strings.TrimSpace(req.Topic)
+	if topic == "" {
+		topic = strings.TrimSpace(req.Prompt)
+	}
 	if topic == "" {
 		return nil, ErrInvalid
 	}
@@ -45,8 +61,8 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest, validCat fu
 		return nil, ErrInvalid
 	}
 	sources := []Source{}
-	if req.IncludeWebSearch == nil || *req.IncludeWebSearch {
-		if found, err := s.Search.Search(ctx, topic); err == nil {
+	if shouldSearch(req) && s.Search != nil {
+		if found, err := s.Search.Search(ctx, topic); err == nil && found != nil {
 			sources = found
 		}
 	}
@@ -76,5 +92,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest, validCat fu
 		}
 	}
 	art.Sources = sources
+	art.SearchSources = sources
 	return &art, nil
 }
