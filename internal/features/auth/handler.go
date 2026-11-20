@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"app/internal/middleware"
 	"app/internal/models"
 	"app/internal/response"
 
@@ -35,11 +36,14 @@ func (h *Handler) Register(c *gin.Context) {
 	case errors.Is(err, ErrInvalid):
 		response.Fail(c, http.StatusBadRequest, "Username, email, dan password wajib diisi dengan benar")
 	case errors.Is(err, ErrDuplicate):
-		response.Fail(c, http.StatusConflict, "Username atau email sudah terdaftar")
+		response.Fail(c, http.StatusBadRequest, "Username atau email sudah terdaftar")
 	case err != nil:
 		response.Error(c, http.StatusInternalServerError, "Gagal mendaftarkan pengguna")
 	default:
-		response.Success(c, http.StatusCreated, "Registrasi berhasil", userMap(u))
+		tok, _ := middleware.GenerateToken(h.Svc.Secret, u.ID, u.Username, u.Role)
+		m := userMap(u)
+		m["token"] = tok
+		response.Success(c, http.StatusCreated, "Registrasi berhasil", m)
 	}
 }
 
@@ -91,7 +95,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	case errors.Is(err, ErrInvalid):
 		response.Fail(c, http.StatusBadRequest, "Email tidak valid")
 	case errors.Is(err, ErrDuplicate):
-		response.Fail(c, http.StatusConflict, "Username atau email sudah dipakai")
+		response.Fail(c, http.StatusBadRequest, "Username atau email sudah dipakai")
 	case err != nil:
 		response.Fail(c, http.StatusNotFound, "Pengguna tidak ditemukan")
 	default:

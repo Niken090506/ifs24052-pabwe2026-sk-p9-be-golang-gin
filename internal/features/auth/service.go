@@ -22,12 +22,18 @@ type Service struct {
 	Secret string
 }
 
+func validEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	if err != nil || addr.Address != email {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	return len(parts) == 2 && strings.Contains(parts[1], ".")
+}
+
 func (s *Service) Register(req RegisterRequest) (*models.User, error) {
 	req.Username, req.Email = strings.TrimSpace(req.Username), strings.TrimSpace(req.Email)
-	if req.Username == "" || req.Password == "" {
-		return nil, ErrInvalid
-	}
-	if _, err := mail.ParseAddress(req.Email); err != nil {
+	if len(req.Username) < 3 || len(req.Password) < 4 || !validEmail(req.Email) {
 		return nil, ErrInvalid
 	}
 	if s.Repo.Exists(req.Username, req.Email, 0) {
@@ -66,7 +72,7 @@ func (s *Service) Update(id uint, req UpdateProfileRequest) (*models.User, error
 		u.Username = strings.TrimSpace(req.Username)
 	}
 	if req.Email != "" {
-		if _, err := mail.ParseAddress(req.Email); err != nil {
+		if !validEmail(strings.TrimSpace(req.Email)) {
 			return nil, ErrInvalid
 		}
 		u.Email = strings.TrimSpace(req.Email)

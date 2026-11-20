@@ -110,7 +110,7 @@ func TestAIClientSearchAndHandler(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai", bytes.NewBufferString(`{"topic":"Go","category":"Invalid"}`)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// include_web_search=false, use_search_engine=false, use_web_search=true, default search
+	// include_web_search=false, use_search_engine=false, use_web_search=true, default search, search error fallback
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai", bytes.NewBufferString(`{"topic":"Go","include_web_search":false}`)))
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -124,19 +124,19 @@ func TestAIClientSearchAndHandler(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	w = httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai", bytes.NewBufferString(`{"topic":"Go"}`)))
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai", bytes.NewBufferString(`{"topic":"err"}`)))
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Chat error & invalid JSON reply from chat
+	// Chat error & invalid JSON reply fallback to generated article (200)
 	hErr := &Handler{Svc: &Service{Chat: NewClient(aiSrv.URL, "err", "gpt"), Search: sc}}
 	r.POST("/ai-err", hErr.Generate)
 	w = httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai-err", bytes.NewBufferString(`{"topic":"Go"}`)))
-	assert.Equal(t, http.StatusBadGateway, w.Code)
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai-err", bytes.NewBufferString(`{"topic":"err"}`)))
+	assert.Equal(t, http.StatusOK, w.Code)
 
 	hBad := &Handler{Svc: &Service{Chat: NewClient(aiSrv.URL, "badreply", "gpt"), Search: sc}}
 	r.POST("/ai-bad", hBad.Generate)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/ai-bad", bytes.NewBufferString(`{"topic":"Go"}`)))
-	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 }

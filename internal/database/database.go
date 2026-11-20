@@ -38,17 +38,18 @@ func Migrate(db *gorm.DB) error {
 }
 
 func seedUser(db *gorm.DB, username, email, password, role string) error {
-	var n int64
-	db.Model(&models.User{}).Where("username = ?", username).Count(&n)
-	if n > 0 {
-		return nil
-	}
+	var u models.User
 	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err := db.Where("username = ?", username).First(&u).Error; err == nil {
+		u.Role = role
+		u.Password = string(hash)
+		return db.Save(&u).Error
+	}
 	return db.Create(&models.User{Username: username, Email: email, Password: string(hash), Role: role,
 		CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error
 }
 
-// Seed membuat akun admin dan member bawaan.
+// Seed membuat/memastikan akun admin dan member bawaan memiliki role yang benar.
 func Seed(db *gorm.DB, cfg *config.Config) error {
 	if err := seedUser(db, cfg.AdminUsername, cfg.AdminUsername+"@delcom.org", cfg.AdminPassword, "admin"); err != nil {
 		return err

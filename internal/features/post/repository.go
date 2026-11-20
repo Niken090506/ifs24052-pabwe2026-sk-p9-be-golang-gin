@@ -43,6 +43,14 @@ func (r *Repository) ByUser(uid uint) ([]models.Post, error) {
 	return out, r.DB.Where("user_id = ?", uid).Order("id DESC").Find(&out).Error
 }
 
+func (r *Repository) FindByID(id uint) (*models.Post, error) {
+	var p models.Post
+	if err := r.DB.First(&p, id).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 func (r *Repository) Owned(id, uid uint) (*models.Post, error) {
 	var p models.Post
 	if err := r.DB.Where("id = ? AND user_id = ?", id, uid).First(&p).Error; err != nil {

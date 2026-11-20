@@ -16,6 +16,7 @@ type PostRequest struct {
 type Stats struct {
 	Total          int64 `json:"total"`
 	TotalPosts     int64 `json:"total_posts"`
+	TotalArticles  int64 `json:"total_articles"`
 	TotalPublished int64 `json:"total_published"`
 	Published      int64 `json:"published"`
 	TotalDraft     int64 `json:"total_draft"`
@@ -28,9 +29,12 @@ type Stats struct {
 type AdminUser struct {
 	models.User
 	TotalPosts     int64 `json:"total_posts"`
+	TotalArticles  int64 `json:"total_articles"`
 	PostsCount     int64 `json:"posts_count"`
 	TotalPublished int64 `json:"total_published"`
 	PublishedPosts int64 `json:"published_posts"`
+	TotalSelesai   int64 `json:"total_selesai"`
 	TotalDraft     int64 `json:"total_draft"`
 	DraftPosts     int64 `json:"draft_posts"`
+	BelumSelesai   int64 `json:"belum_selesai"`
 }

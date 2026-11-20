@@ -12,8 +12,10 @@ import (
 )
 
 var (
-	ErrInvalid = errors.New("invalid")
-	nonSlug    = regexp.MustCompile(`[^a-z0-9]+`)
+	ErrInvalid   = errors.New("invalid")
+	ErrForbidden = errors.New("forbidden")
+	ErrNotFound  = errors.New("not_found")
+	nonSlug      = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
 type Service struct{ Repo *Repository }
@@ -112,10 +114,28 @@ func (s *Service) Create(uid uint, req PostRequest) (*models.Post, error) {
 	return decorate(p), nil
 }
 
+// FindOwned memeriksa keberadaan post terlebih dahulu (404) lalu kepemilikan (403).
+func (s *Service) FindOwned(id, uid uint) (*models.Post, error) {
+	p, err := s.Repo.FindByID(id)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	if p.UserID != uid {
+		return nil, ErrForbidden
+	}
+	return p, nil
+}
+
 func (s *Service) Update(id, uid uint, req PostRequest) (*models.Post, error) {
-	p, err := s.Repo.Owned(id, uid)
+	p, err := s.FindOwned(id, uid)
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(req.Title) != "" && strings.TrimSpace(req.Content) == "" {
+		req.Content = p.Content
+	}
+	if req.Category == "" {
+		req.Category = p.Category
 	}
 	if err := s.apply(p, req); err != nil {
 		return nil, err
@@ -124,7 +144,7 @@ func (s *Service) Update(id, uid uint, req PostRequest) (*models.Post, error) {
 }
 
 func (s *Service) Toggle(id, uid uint) (*models.Post, error) {
-	p, err := s.Repo.Owned(id, uid)
+	p, err := s.FindOwned(id, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +156,7 @@ func (s *Service) Stats(uid uint) Stats {
 	total, pub := s.Repo.Count(uid, false), s.Repo.Count(uid, true)
 	draft := total - pub
 	return Stats{
-		Total: total, TotalPosts: total,
+		Total: total, TotalPosts: total, TotalArticles: total,
 		TotalPublished: pub, Published: pub,
 		TotalDraft: draft, Draft: draft,
 		TotalSelesai: pub, BelumSelesai: draft,
@@ -163,11 +183,14 @@ func (s *Service) AdminUsers() ([]AdminUser, error) {
 		out = append(out, AdminUser{
 			User:           u,
 			TotalPosts:     total,
+			TotalArticles:  total,
 			PostsCount:     total,
 			TotalPublished: pub,
 			PublishedPosts: pub,
+			TotalSelesai:   pub,
 			TotalDraft:     draft,
 			DraftPosts:     draft,
+			BelumSelesai:   draft,
 		})
 	}
 	return out, nil

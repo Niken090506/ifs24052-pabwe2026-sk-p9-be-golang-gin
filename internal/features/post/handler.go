@@ -1,9 +1,11 @@
 package post
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
+	"app/internal/models"
 	"app/internal/response"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +22,44 @@ func idParam(c *gin.Context) (uint, bool) {
 	return uint(n), true
 }
 
+func toPublicPost(p models.Post) gin.H {
+	authorName := "Penulis"
+	var author gin.H
+	if p.User != nil {
+		authorName = p.User.Username
+		author = gin.H{
+			"id":       p.User.ID,
+			"username": p.User.Username,
+			"role":     p.User.Role,
+		}
+	}
+	return gin.H{
+		"id":               p.ID,
+		"title":            p.Title,
+		"slug":             p.Slug,
+		"category":         p.Category,
+		"excerpt":          p.Excerpt,
+		"content":          p.Content,
+		"cover_image_path": p.CoverImagePath,
+		"is_published":     p.IsPublished,
+		"published_at":     p.PublishedAt,
+		"reading_time":     p.ReadingTime,
+		"author":           author,
+		"author_name":      authorName,
+		"username":         authorName,
+		"created_at":       p.CreatedAt,
+		"updated_at":       p.UpdatedAt,
+	}
+}
+
+func toPublicPosts(ps []models.Post) []gin.H {
+	out := make([]gin.H, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, toPublicPost(p))
+	}
+	return out
+}
+
 func (h *Handler) Categories(c *gin.Context) {
 	response.Success(c, http.StatusOK, "Kategori berhasil diambil", Categories)
 }
@@ -34,7 +74,7 @@ func (h *Handler) PublicList(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, "Gagal mengambil artikel")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorateAll(ps))
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", toPublicPosts(decorateAll(ps)))
 }
 
 func (h *Handler) PublicDetail(c *gin.Context) {
@@ -43,7 +83,7 @@ func (h *Handler) PublicDetail(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", decorate(p))
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", toPublicPost(*decorate(p)))
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -60,6 +100,7 @@ func (h *Handler) Stats(c *gin.Context) {
 	response.Success(c, http.StatusOK, "Statistik berhasil diambil", gin.H{
 		"total":           st.Total,
 		"total_posts":     st.TotalPosts,
+		"total_articles":  st.TotalArticles,
 		"total_published": st.TotalPublished,
 		"published":       st.Published,
 		"total_draft":     st.TotalDraft,
@@ -93,7 +134,11 @@ func (h *Handler) Detail(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, err := h.Svc.Repo.Owned(id, c.GetUint("user_id"))
+	p, err := h.Svc.FindOwned(id, c.GetUint("user_id"))
+	if errors.Is(err, ErrForbidden) {
+		response.Fail(c, http.StatusForbidden, "Anda tidak memiliki akses ke artikel ini")
+		return
+	}
 	if err != nil {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
@@ -112,15 +157,16 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	p, err := h.Svc.Update(id, c.GetUint("user_id"), req)
-	if err == ErrInvalid {
+	switch {
+	case errors.Is(err, ErrInvalid):
 		response.Fail(c, http.StatusBadRequest, "Judul, konten, dan kategori yang valid wajib diisi")
-		return
-	}
-	if err != nil {
+	case errors.Is(err, ErrForbidden):
+		response.Fail(c, http.StatusForbidden, "Anda tidak memiliki akses ke artikel ini")
+	case err != nil:
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
-		return
+	default:
+		response.Success(c, http.StatusOK, "Artikel berhasil diperbarui", p)
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diperbarui", p)
 }
 
 func (h *Handler) Toggle(c *gin.Context) {
@@ -129,6 +175,10 @@ func (h *Handler) Toggle(c *gin.Context) {
 		return
 	}
 	p, err := h.Svc.Toggle(id, c.GetUint("user_id"))
+	if errors.Is(err, ErrForbidden) {
+		response.Fail(c, http.StatusForbidden, "Anda tidak memiliki akses ke artikel ini")
+		return
+	}
 	if err != nil {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
@@ -141,7 +191,11 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, err := h.Svc.Repo.Owned(id, c.GetUint("user_id"))
+	p, err := h.Svc.FindOwned(id, c.GetUint("user_id"))
+	if errors.Is(err, ErrForbidden) {
+		response.Fail(c, http.StatusForbidden, "Anda tidak memiliki akses ke artikel ini")
+		return
+	}
 	if err != nil {
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
 		return
@@ -171,10 +225,6 @@ func (h *Handler) AdminPosts(c *gin.Context) {
 func (h *Handler) AdminUserPosts(c *gin.Context) {
 	id, ok := idParam(c)
 	if !ok {
-		return
-	}
-	if !h.Svc.Repo.UserExists(id) {
-		response.Fail(c, http.StatusNotFound, "Pengguna tidak ditemukan")
 		return
 	}
 	ps, _ := h.Svc.Repo.ByUser(id)

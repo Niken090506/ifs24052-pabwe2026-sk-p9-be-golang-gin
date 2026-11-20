@@ -21,6 +21,7 @@ func TestPostPackage(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NoError(t, database.Migrate(db))
 	db.Create(&models.User{Username: "u1", Email: "u1@a.com", Password: "x", Role: "member"})
+	db.Create(&models.User{Username: "u2", Email: "u2@a.com", Password: "x", Role: "member"})
 
 	assert.Equal(t, "artikel", Slugify("🔥🔥🔥"))
 	assert.Equal(t, 1, ReadingTime(""))
@@ -33,7 +34,11 @@ func TestPostPackage(t *testing.T) {
 	r := gin.New()
 	withUser := func(fn gin.HandlerFunc) gin.HandlerFunc {
 		return func(c *gin.Context) {
-			c.Set("user_id", uint(1))
+			if c.Query("as") == "2" {
+				c.Set("user_id", uint(2))
+			} else {
+				c.Set("user_id", uint(1))
+			}
 			fn(c)
 		}
 	}
@@ -105,6 +110,9 @@ func TestPostPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/stats", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
 	_ = repo.Count(0, false)
+	_, _ = repo.Owned(1, 1)
+	_, _ = repo.Owned(99, 1)
+	_ = repo.UserExists(1)
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/posts/abc", nil))
@@ -113,6 +121,11 @@ func TestPostPackage(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/posts/1", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Forbidden (403) when accessed by user 2
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/posts/1?as=2", nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/posts/99", nil))
@@ -131,12 +144,18 @@ func TestPostPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("PUT", "/posts/1", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	unpub := false
-	b, _ = json.Marshal(PostRequest{Title: "Judul 1", Content: "", IsPublished: &unpub})
+	// Forbidden PUT (403)
+	b, _ = json.Marshal(PostRequest{Title: "Dibajak"})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("PUT", "/posts/1?as=2", bytes.NewReader(b)))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	// Partial title-only update
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("PUT", "/posts/1", bytes.NewReader(b)))
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 
+	unpub := false
 	b, _ = json.Marshal(PostRequest{Title: "Judul 1", Content: "Isi baru", IsPublished: &unpub})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("PUT", "/posts/1", bytes.NewReader(b)))
@@ -158,6 +177,10 @@ func TestPostPackage(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("PATCH", "/posts/99/toggle", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("PATCH", "/posts/1/toggle?as=2", nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("PATCH", "/posts/1/toggle", nil))
@@ -182,12 +205,16 @@ func TestPostPackage(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/admin/users/999/posts", nil))
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Delete
+	// Delete (bad id, forbidden, ok, not found)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("DELETE", "/posts/abc", nil))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("DELETE", "/posts/1?as=2", nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("DELETE", "/posts/1", nil))
