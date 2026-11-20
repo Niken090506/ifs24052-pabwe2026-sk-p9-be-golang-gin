@@ -22,7 +22,7 @@ func NewRouter(cfg *config.Config, db *gorm.DB, aiSvc *ai.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.CORS(), middleware.RateLimiter(6000))
 
-	authH := &auth.Handler{Svc: &auth.Service{Repo: &auth.Repository{DB: db}, Secret: cfg.AppKey}}
+	authH := &auth.Handler{Svc: &auth.Service{Repo: &auth.Repository{DB: db}, Secret: cfg.AppKey, Cfg: cfg}}
 	postH := &post.Handler{Svc: &post.Service{Repo: &post.Repository{DB: db}}}
 	aiH := &ai.Handler{Svc: aiSvc}
 

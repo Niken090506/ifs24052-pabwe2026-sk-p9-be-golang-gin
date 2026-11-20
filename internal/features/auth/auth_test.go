@@ -7,10 +7,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"app/internal/config"
 	"app/internal/database"
+	"app/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestAuthPackage(t *testing.T) {
@@ -19,8 +22,9 @@ func TestAuthPackage(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NoError(t, database.Migrate(db))
 
+	cfg := config.LoadConfig()
 	repo := &Repository{DB: db}
-	svc := &Service{Repo: repo, Secret: "secret"}
+	svc := &Service{Repo: repo, Secret: "secret", Cfg: cfg}
 	h := &Handler{Svc: svc}
 
 	r := gin.New()
@@ -49,18 +53,28 @@ func TestAuthPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewBufferString("{")))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Invalid register (empty, short password, bad email)
+	// Invalid register (empty, short password <6, bad email)
 	b, _ := json.Marshal(RegisterRequest{Username: "", Email: "a@b.c", Password: ""})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	b, _ = json.Marshal(RegisterRequest{Username: "u123", Email: "bad-email", Password: "pw12"})
+	b, _ = json.Marshal(RegisterRequest{Username: "u123", Email: "a@b.c", Password: "12345"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	b, _ = json.Marshal(RegisterRequest{Username: "u123", Email: "a@localhost", Password: "pw12"})
+	b, _ = json.Marshal(RegisterRequest{Username: "u123", Email: "bad-email", Password: "password123"})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	b, _ = json.Marshal(RegisterRequest{Username: "u123", Email: "a@localhost", Password: "password123"})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	b, _ = json.Marshal(RegisterRequest{Username: "u123", Email: "a@.com", Password: "password123"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -75,8 +89,8 @@ func TestAuthPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/login", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Register valid user 1 & 2 + duplicate (400)
-	b, _ = json.Marshal(RegisterRequest{Username: "user1", Email: "u1@a.com", Password: "pw12"})
+	// Register valid user 1, user 2, and admin account + duplicate (400)
+	b, _ = json.Marshal(RegisterRequest{Username: "user1", Email: "u1@a.com", Password: "password123"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -85,13 +99,26 @@ func TestAuthPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	b, _ = json.Marshal(RegisterRequest{Username: "user2", Email: "u2@a.com", Password: "pw12"})
+	b, _ = json.Marshal(RegisterRequest{Username: "user2", Email: "u2@a.com", Password: "password123"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusCreated, w.Code)
 
+	b, _ = json.Marshal(RegisterRequest{Username: "admin_test", Email: "adm@a.com", Password: "password123"})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	// Pre-existing admin with role member gets promoted on login
+	hash, _ := bcrypt.GenerateFromPassword([]byte("adminpw"), bcrypt.DefaultCost)
+	db.Create(&models.User{Username: "admin", Email: "admin@delcom.org", Password: string(hash), Role: "member"})
+	b, _ = json.Marshal(LoginRequest{Username: "admin", Password: "adminpw"})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/login", bytes.NewReader(b)))
+	assert.Equal(t, http.StatusOK, w.Code)
+
 	// Login wrong password, non-existent user, & login by email
-	b, _ = json.Marshal(LoginRequest{Username: "ghost", Password: "pw12"})
+	b, _ = json.Marshal(LoginRequest{Username: "ghost", Password: "password123"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/login", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -101,7 +128,7 @@ func TestAuthPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/login", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	b, _ = json.Marshal(LoginRequest{Email: "u1@a.com", Password: "pw12"})
+	b, _ = json.Marshal(LoginRequest{Email: "u1@a.com", Password: "password123"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/login", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -130,7 +157,7 @@ func TestAuthPackage(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest("PUT", "/prof?uid=1", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	b, _ = json.Marshal(UpdateProfileRequest{Username: "u1new", Email: "u1new@a.com", Password: "newpw"})
+	b, _ = json.Marshal(UpdateProfileRequest{Username: "u1new", Email: "u1new@a.com", Password: "newpassword"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("PUT", "/prof?uid=1", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -146,7 +173,7 @@ func TestAuthPackage(t *testing.T) {
 
 	// DB error branch on Register when table is dropped
 	_ = db.Migrator().DropTable("users")
-	b, _ = json.Marshal(RegisterRequest{Username: "user3", Email: "u3@a.com", Password: "pw12"})
+	b, _ = json.Marshal(RegisterRequest{Username: "user3", Email: "u3@a.com", Password: "password123"})
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("POST", "/reg", bytes.NewReader(b)))
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

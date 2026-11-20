@@ -80,15 +80,15 @@ func TestFullFlow(t *testing.T) {
 	assert.Equal(t, 200, wTLS.Code)
 
 	// auth
-	code, _ = call(r, "POST", "/api/auth/register", "", map[string]string{"username": "budi", "email": "budi@x.com", "password": "pw12"})
+	code, _ = call(r, "POST", "/api/auth/register", "", map[string]string{"username": "budi", "email": "budi@x.com", "password": "password123"})
 	assert.Equal(t, 201, code)
-	code, _ = call(r, "POST", "/api/auth/register", "", map[string]string{"username": "budi", "email": "budi@x.com", "password": "pw12"})
+	code, _ = call(r, "POST", "/api/auth/register", "", map[string]string{"username": "budi", "email": "budi@x.com", "password": "password123"})
 	assert.Equal(t, 400, code)
 	code, _ = call(r, "POST", "/api/auth/register", "", map[string]string{"username": "", "email": "bad", "password": ""})
 	assert.Equal(t, 400, code)
 	code, _ = call(r, "POST", "/api/auth/login", "", map[string]string{"username": "budi", "password": "salah"})
 	assert.Equal(t, 401, code)
-	tok := login(t, r, "budi", "pw12")
+	tok := login(t, r, "budi", "password123")
 	code, _ = call(r, "GET", "/api/auth/profile", "", nil)
 	assert.Equal(t, 401, code)
 	code, _ = call(r, "GET", "/api/auth/profile", tok, nil)
