@@ -25,6 +25,15 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
 }
 
+// ConnectOrFallback membuka koneksi database utama atau fallback ke SQLite bila gagal.
+func ConnectOrFallback(cfg *config.Config) *gorm.DB {
+	db, err := Connect(cfg)
+	if err != nil {
+		db, _ = ConnectSQLite()
+	}
+	return db
+}
+
 // ConnectSQLite membuka SQLite in-memory untuk unit test.
 func ConnectSQLite() (*gorm.DB, error) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{Logger: logger.Discard})

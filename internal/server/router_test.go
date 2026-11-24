@@ -68,7 +68,9 @@ func login(t *testing.T, r *gin.Engine, u, p string) string {
 func TestFullFlow(t *testing.T) {
 	r := setup(t, nil)
 
-	code, _ := call(r, "GET", "/nope", "", nil)
+	code, _ := call(r, "GET", "/", "", nil)
+	assert.Equal(t, 200, code)
+	code, _ = call(r, "GET", "/nope", "", nil)
 	assert.Equal(t, 404, code)
 	code, _ = call(r, "GET", "/api.json", "", nil)
 	assert.Equal(t, 200, code)

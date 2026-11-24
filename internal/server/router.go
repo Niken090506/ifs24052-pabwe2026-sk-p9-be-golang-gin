@@ -26,6 +26,9 @@ func NewRouter(cfg *config.Config, db *gorm.DB, aiSvc *ai.Service) *gin.Engine {
 	postH := &post.Handler{Svc: &post.Service{Repo: &post.Repository{DB: db}}}
 	aiH := &ai.Handler{Svc: aiSvc}
 
+	r.GET("/", func(c *gin.Context) {
+		response.Success(c, http.StatusOK, "Delcom Blog API is running", gin.H{"service": "delcom-blog-api"})
+	})
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/api.json")))
 	r.GET("/api.json", func(c *gin.Context) {
 		scheme := "http"
